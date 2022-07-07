@@ -90,10 +90,10 @@ index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" se
 index=_introspection data.search_props.sid::* component=PerProcess sourcetype=splunk_resource_usage earliest=-7d@d latest=@d
 | eval elapsed='data.elapsed', sid='data.search_props.sid', type='data.search_props.type', search_head=coalesce('data.search_props.search_head',host)
 | bin span=10s _time 
-| stats dc(sid) AS concurrency by _time search_head
+| stats dc(sid) AS concurrency by _time search_head type
 | bin span=1d _time
-| stats max(concurrency) p90(concurrency) p50(concurrency) avg(concurrency) by _time search_head
-| stats max(*) as * by search_head
+| stats max(concurrency) p90(concurrency) p50(concurrency) avg(concurrency) by _time search_head type
+| stats max(*) as * by search_head type
 | foreach *concurrency*
     [ eval <<FIELD>> = round('<<FIELD>>', 1) ]
 
