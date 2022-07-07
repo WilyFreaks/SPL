@@ -1,5 +1,6 @@
+Stack Check Level 1.
 Run these searches under monitoring console app if it is connected to read your indexer data. If not, then run them from search heads.
-Replace sh* and idx* to match your actual Search Head and Indexer host name
+Replace sh* and idx* to match your actual Search Head and Indexer host name.
 
 [Hardware]
 | rest splunk_server=* /services/server/info
