@@ -1,0 +1,139 @@
+Run these searches under monitoring console app if it is connected to read your indexer data. If not, then run them from search heads.
+Replace sh* and idx* to match your actual Search Head and Indexer host name
+
+[Hardware]
+| rest splunk_server=* /services/server/info
+| eval physicalMemoryGB = round(physicalMemoryMB / 1024, 2)
+| eval startup_time = strftime(startup_time, "%F %T")
+| table host product_type version cpu_arch os_name os_version physicalMemoryGB numberOfCores numberOfVirtualCores isForwarding isFree isTrial kvStoreStatus startup_time
+| sort host
+
+[CPU Utilization]
+index=_introspection host IN (sh*, idx*) component=Hostwide  earliest=-7d@d latest=@d
+| eval cpu_usage = 'data.cpu_system_pct' + 'data.cpu_user_pct'
+| bin _time span=1h
+| stats max(cpu_usage) p90(cpu_usage) p50(cpu_usage) avg(cpu_usage) by _time host
+
+[Load Average]
+index=_introspection host IN (sh*, idx*) component=Hostwide earliest=-7d@d latest=@d
+| bin _time span=1h
+| stats max(data.normalized_load_avg_1min) p90(data.normalized_load_avg_1min) p50(data.normalized_load_avg_1min) avg(data.normalized_load_avg_1min) by _time host
+
+[Memory Utilization]
+index=_introspection host IN (*sh*, *idx*) sourcetype=splunk_resource_usage component=Hostwide earliest=-7d@d latest=@d
+| eval mem_used_rate = round(('data.mem_used' / 'data.mem') * 100, 2)
+| bin _time span=1h
+| stats max(mem_used_rate) p90(mem_used_rate) p50(mem_used_rate) avg(mem_used_rate) by _time host
+
+[Disk I/O]
+component=IOStats host IN (sh*, idx*) index=_introspection sourcetype=splunk_resource_usage earliest=-7d@d latest=@d
+| eval mount_point='data.mount_point', reads_ps='data.reads_ps', writes_ps='data.writes_ps', interval='data.interval', op_count=((reads_ps + writes_ps) * interval), iops=(reads_ps + writes_ps), avg_service_ms='data.avg_service_ms', avg_wait_ms='data.avg_total_ms', cpu_pct='data.cpu_pct', network_pct='data.network_pct' 
+| bin _time span=1h
+| stats max(avg_wait_ms) min(avg_wait_ms) p90(avg_wait_ms) p75(avg_wait_ms) p50(avg_wait_ms) p25(avg_wait_ms) max(iops) min(iops) p90(iops) p75(iops) p50(iops) p25(iops) by _time host mount_point
+
+[Ingestion]
+index=_internal host=idx* source="*metrics.log" sourcetype=splunkd group=per_Index_thruput earliest=-7d@d latest=@d
+| eval ingest_pipe=if(isnotnull(ingest_pipe),ingest_pipe,"none")
+| search ingest_pipe=*
+| eval mb=kb/1024
+| bin _time span=1h 
+| stats sum(mb) as MBh by _time host ingest_pipe
+
+[Index Queue Fill Ratio]
+index=_internal host=idx* source=*metrics.log sourcetype=splunkd group=queue (name=tcpin_queue OR name=parsingqueue OR name=aggqueue OR name=typingqueue OR name=indexqueue) OR blocked=true earliest=-7d@d latest=@d 
+| eval ingest_pipe = if(isnotnull(ingest_pipe), ingest_pipe, "0")
+| search ingest_pipe=*
+| eval max=if(isnotnull(max_size_kb),max_size_kb,max_size)
+| eval curr=if(isnotnull(current_size_kb),current_size_kb,current_size)
+| eval fill_perc=round((curr/max)*100,2)
+| bin _time span=1h
+| stats perc90(fill_perc) count(eval(blocked="true")) as blocked_count by _time host ingest_pipe name
+| rename name AS queue
+
+[Searches per Day]
+index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" search_id!="'searchparsetmp_*" search_id!="'remote_*" search_id=* total_run_time earliest=-7d@d latest=@d
+| eval host_sid = 'host'.":".'search_id'
+| bin _time span=1d
+| stats dc(host_sid) AS search_count by _time
+
+[Search Durations]
+index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" search_id!="'searchparsetmp_*" search_id!="'remote_*" search_id=* total_run_time earliest=-7d@d latest=@d
+| eval user = if(user="n/a", null(), user) 
+| rex field=_raw "[^\_]index=\"?(?<Index>[\_a-zA-Z\-\:]{2,})\"?" max_match=0 
+| eval Index=lower(Index) 
+| rex field=search_id "\'(?P<search_id>.*?)\'" 
+| eval search=if(isnull(savedsearch_name) OR savedsearch_name=="", search, savedsearch_name) 
+| eval search_type=case(match(search_id,"^SummaryDirector_"),"summarization",match(savedsearch_name,"^_ACCELERATE_"),"acceleration",match(search_id,"^((rt_)?scheduler_|alertsmanager_)"),"scheduled",match(search_id,"\\d{10}\\.\\d+(_[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})?$"),"ad hoc",true(),"other") 
+| stats min(_time) as _time, values(user) as user, latest(info) as status, max(total_run_time) as total_run_time, values(Index) as Index , first(search) as search, first(search_type) as search_type, values(app) as app, first(apiStartTime) as apiStartTime, first(apiEndTime) as apiEndTime , first(search_et) as search_et, first(search_lt) as search_lt, max(searched_buckets) as searched_buckets, max(scan_count) as scan_count, max(considered_events) as considered_events, max(event_count) as event_count, max(result_count) as result_count, first(exec_time) as exec_time by search_id
+| stats count max(total_run_time) p90(total_run_time) p50(total_run_time) avg(total_run_time) by search_type status
+
+[Concurrent Search Admission]
+| rest splunk_server=* /services/server/status/limits/search-concurrency 
+
+[Long Search Concurrency]
+index=_introspection data.search_props.sid::* component=PerProcess sourcetype=splunk_resource_usage earliest=-7d@d latest=@d
+| eval elapsed='data.elapsed', sid='data.search_props.sid', type='data.search_props.type', search_head=coalesce('data.search_props.search_head',host)
+| bin span=10s _time 
+| stats dc(sid) AS concurrency by _time search_head
+| bin span=1d _time
+| stats max(concurrency) p90(concurrency) p50(concurrency) avg(concurrency) by _time search_head
+| stats max(*) as * by search_head
+| foreach *concurrency*
+    [ eval <<FIELD>> = round('<<FIELD>>', 1) ]
+
+[Short Search Concurrency]
+index=_internal sourcetype=splunkd source=*metrics.log group=search_concurrency "system total" earliest=-7d@d latest=@d
+| bin _time span=1d
+| stats max(active_hist_searches) p90(active_hist_searches) p50(active_hist_searches) avg(active_hist_searches) by _time host
+| stats max(*) as * by host
+| foreach *active_hist_searches*
+    [ eval <<FIELD>> = round('<<FIELD>>', 1) ]
+
+[Scheduled Searches by Status per Day]
+index=_internal host=sh* sourcetype=scheduler earliest=-7d@d latest=@d
+| bin _time span=1d
+| stats count by _time status
+
+[Scheduled Search Performance per Hour]
+index=_internal host=sh* sourcetype=scheduler (status="success" OR status="skipped" OR status="continued") earliest=-7d@d latest=@d
+| eval window_time = if(isnotnull(window_time), window_time, 0) 
+| eval execution_latency = max(dispatch_time - (scheduled_time + window_time), 0) 
+| bin _time span=1d 
+| stats values(search_type) as type, p90(execution_latency) as execution_latency , count(eval(status=="success" OR status=="skipped")) AS total_count, count(eval(status=="skipped")) AS skipped_count count(eval(status=="continued")) AS continued_count p90(run_time) as run_time by _time app
+| eval skip_ratio = round(skipped_exec / total_exec * 100, 1)
+| eval execution_latency = round(execution_latency,0)
+| sort 0 - skipped_exec
+
+[Shceduled Search Detail]
+index=_internal host=sh* source=*scheduler.log sourcetype=scheduler SavedSplunker status!=delegated_* earliest=-7d@d latest=@d 
+| sort 0 app savedsearch_name _time
+| streamstats window=1 current=f reset_on_change=t last(scheduled_time) as prev_scheduled_time by app savedsearch_name
+| eval lag_time = dispatch_time - scheduled_time 
+| eval act_interval = scheduled_time - prev_scheduled_time
+| stats count as total_count count(eval(status="success")) as success_count count(eval(status="skipped")) as skipped_count count(eval(status="continued")) AS continued_count min(act_interval) as act_interval max(run_time) p90(run_time) p50(run_time) min(run_time) sum(run_time) max(lag_time) p90(lag_time) p50(lag_time) min(lag_time) earliest(lag_time) latest(lag_time) by host app savedsearch_name user 
+| join type=left app savedsearch_name 
+    [ rest splunk_server=local "/servicesNS/-/-/saved/searches/" search="is_scheduled=1" search="disabled=0" 
+    | fields title, eai:acl.app, eai:acl.owner, cron_schedule, realtime_schedule durable.* dispatch.earliest_time, dispatch.latest_time, schedule_window, allow_skew, actions, schedule_priority, dispatch.ttl, auto_summarize action.summary_index
+    | rename title as savedsearch_name eai:acl.* as * dispatch.* as dispatch_* durable.* as durable_* action.* as action_* cron_schedule as cron ] 
+| rex field=cron "^(?<cron_m>\S+)\s+(?<cron_h>\S+)\s+(?<cron_date>\S+)\s+(?<cron_month>\S+)\s+(?<cron_dow>\S+)" 
+| rex field=cron_dow max_match=0 "(?<cron_dow_at>\d+)" 
+| rex field=cron_month max_match=0 "(?<cron_month_at>\d+)" 
+| rex field=cron_date max_match=0 "(?<cron_date_at>\d+)" 
+| rex field=cron_h max_match=0 "(?<cron_h_at>\d+)" 
+| rex field=cron_h "\/(?<cron_h_every>.+)" 
+| rex field=cron_h "(?<cron_h_thr>\d+-\d+)" 
+| rex field=cron_m max_match=0 "(?<cron_m_at>\d+)" 
+| rex field=cron_m "\/(?<cron_m_every>.+)" 
+| eval cron_h_at = if(match(cron_h, "^\d+-"), mvindex(cron_h_at, 0), if(cron_h = "*", 0, cron_h_at)) 
+| eval cron_h_at0 = mvindex(cron_h_at,0), cron_h_at1 = mvindex(cron_h_at,1) 
+| eval cron_m_at = if(match(cron_m, "^\d+-"), mvindex(cron_m_at, 0), if(cron_m = "*", 0, cron_m_at)) 
+| eval cron_m_at0 = mvindex(cron_m_at,0), cron_m_at1 = mvindex(cron_m_at,1) 
+| eval interval = case(isnotnull(cron_dow_at), 86400*7, isnotnull(cron_month_at), 86400*365, isnotnull(cron_date_at), 86400*28, isnotnull(cron_h_every), cron_h_every * 3600, isnotnull(cron_h_thr), 3600, mvcount(cron_h_at)>1, (cron_h_at1 - cron_h_at0) * 3600, cron_m = "*", 60, isnotnull(cron_m_every), cron_m_every * 60, isnum(cron_m) AND cron_h = "*", 3600, mvcount(cron_m_at)>1, (cron_m_at1 - cron_m_at0) * 60, isnotnull(cron), 86400) 
+| addinfo 
+| eval period = info_max_time - info_min_time 
+| eval interval = if(isnull(interval), ceil(period / total_count / 60) * 60, interval) 
+| eval interval_fill = round(('max(run_time)' / interval) , 2) 
+| eval cron_run = case(cron_m="*", "run_every_1", isnotnull(cron_m_every), "run_every_".cron_m_every, isnum(cron_m_at), "run_at_".(cron_m_at - 0), 1=1, cron_m) 
+| eval cron_run = if(isnull(cron_run), if(interval >= 3600, "run_at_0", "run_every_".(interval/60)), cron_run) 
+| fields host app savedsearch_name user cron cron_run interval act_interval max(run_time) p90(run_time) p50(run_time) min(run_time) sum(run_time) interval_fill total_count success_count skipped_count continued_count max(lag_time) earliest(lag_time) latest(lag_time) dispatch_earliest_time dispatch_latest_time realtime_schedule schedule_priority schedule_window allow_skew workload_pool dispatch_ttl durable_* auto_summarize action_summary_index 
+| sort 0 - interval_fill
