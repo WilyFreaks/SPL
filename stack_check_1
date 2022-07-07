@@ -56,7 +56,7 @@ index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" se
 | bin _time span=1d
 | stats dc(host_sid) AS search_count by _time
 
-[Search Durations]
+[Search Performance]
 index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" search_id!="'searchparsetmp_*" search_id!="'remote_*" search_id=* total_run_time earliest=-7d@d latest=@d
 | eval user = if(user="n/a", null(), user) 
 | rex field=_raw "[^\_]index=\"?(?<Index>[\_a-zA-Z\-\:]{2,})\"?" max_match=0 
@@ -64,8 +64,11 @@ index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" se
 | rex field=search_id "\'(?P<search_id>.*?)\'" 
 | eval search=if(isnull(savedsearch_name) OR savedsearch_name=="", search, savedsearch_name) 
 | eval search_type=case(match(search_id,"^SummaryDirector_"),"summarization",match(savedsearch_name,"^_ACCELERATE_"),"acceleration",match(search_id,"^((rt_)?scheduler_|alertsmanager_)"),"scheduled",match(search_id,"\\d{10}\\.\\d+(_[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})?$"),"ad hoc",true(),"other") 
-| stats min(_time) as _time, values(user) as user, latest(info) as status, max(total_run_time) as total_run_time, values(Index) as Index , first(search) as search, first(search_type) as search_type, values(app) as app, first(apiStartTime) as apiStartTime, first(apiEndTime) as apiEndTime , first(search_et) as search_et, first(search_lt) as search_lt, max(searched_buckets) as searched_buckets, max(scan_count) as scan_count, max(considered_events) as considered_events, max(event_count) as event_count, max(result_count) as result_count, first(exec_time) as exec_time by search_id
-| stats count max(total_run_time) p90(total_run_time) p50(total_run_time) avg(total_run_time) by search_type status
+| bin _time span=1d
+| stats values(user) as user, latest(info) as status, max(total_run_time) as total_run_time, values(Index) as Index , first(search) as search, first(search_type) as search_type, values(app) as app, first(apiStartTime) as apiStartTime, first(apiEndTime) as apiEndTime , first(search_et) as search_et, first(search_lt) as search_lt, max(searched_buckets) as searched_buckets, max(scan_count) as scan_count, max(considered_events) as considered_events, max(event_count) as event_count, max(result_count) as result_count, first(exec_time) as exec_time by _time search_id
+| stats count as daily_count max(total_run_time) as total_run_time_max p90(total_run_time) as total_run_time_p90 p50(total_run_time) as total_run_time_p50 avg(total_run_time) as total_run_time_avg by _time search_type status
+| stats max(*) by search_type status
+| fields search_type status max(daily_count) max(total_run_time_max) max(total_run_time_p90) max(total_run_time_p50) max(total_run_time_avg)
 
 [Concurrent Search Admission]
 | rest splunk_server=* /services/server/status/limits/search-concurrency 
