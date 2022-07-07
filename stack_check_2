@@ -1,0 +1,178 @@
+Stack Check Level 2.
+Run these searches under monitoring console app if it is connected to read your indexer data. If not, then run them from search heads.
+Replace sh* and idx* to match your actual Search Head and Indexer host name.
+
+[Resource Consumer]
+index=_introspection host IN (sh* idx*) sourcetype="splunk_resource_usage" component=PerProcess data.normalized_pct_cpu=*
+| eval search_label=case(isnull(search_label) AND search_type=="ad-hoc","no label: ad-hoc", match(sid,"IndexesPrefix"),"no label: IndexesPrefix", isnull(search_label) AND match(sid,"subsearch"),"no label: subsearch", isnull(search_label) AND match(sid,"SummaryDirector"),"no label: SummaryDirector", isnull(search_label) AND process_type=="search", "no label: missing context", 1==1, search_label)
+| rename data.search_props.* AS search_*, data.process_type AS process_type
+| fillnull value="" search_app, search_mode, search_type, search_role, search_user, search_provenance, search_label
+| bucket span=1h _time
+| stats count sum(data.normalized_pct_cpu) AS vcpu_consumption_score sum(data.pct_memory) AS memory_consumption_score by _time host process_type search_app, search_mode, search_type, search_role, search_user, search_provenance, search_label
+
+[Skipped Search Detail]
+index=_internal host=sh* source=*scheduler.log sourcetype=scheduler SavedSplunker status=skipped earliest=-7d@d latest=@d
+| stats count by host app savedsearch_name search_type reason
+| sort - count
+
+[Search Performance per Category]
+index=_audit sourcetype=audittrail TERM(action=search) search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" search_id!="'searchparsetmp_*" search_id!="'remote_*" search_id=* total_run_time earliest=-7d@d latest=@d
+| eval host_sid = 'host'.":".'search_id'
+| eval search_type_org = search_type
+| eval
+    search_type = case(
+    match(search_id,"^\'\d{10}\.\d+"), "ad_hoc",
+    match(search_id,"^\'md\_"), "metadata",
+    match(search_id,"^\'prd\.ph\_"), "parallel_reduce",
+    match(search_id,"^\'rt\_\d{10}\.\d+"), "real_time",
+    match(search_id,"^\'scheduler\_\_?"), "scheduled",
+    match(search_id,"^\'subsearch\_"), "subsearch",
+    match(search_id,"^\'summarize\_"), "summary",
+    match(search_id,"^\'SummaryDirector\_"), "report_acceleration",
+    match(search_id,"^\'ta\_"), "type_ahead",
+    match(search_id,"^\'alertsmanager"), "type_ahead",
+    match(search_id,"^\'?\w+\_\_\w+\_\_"),"dashboard_panel",
+    1=1,provenance)
+| eval search_type_sub = case(match(search_type_org, "^(scheduled|datamodel_acceleration|report_acceleration)"), search_type_org, 1=1, search_type)
+| fillnull value="N/A" provenance
+| bin _time span=1d
+| stats dc(host_sid) AS daily_search_count max(total_run_time) p90(total_run_time) p50(total_run_time) avg(total_run_time) by _time app search_type search_type_sub provenance
+| stats max(*) by app search_type search_type_sub provenance
+| foreach *daily_search_count*
+    [ eval <<FIELD>> = round('<<FIELD>>',0) ]
+| fields app search_type search_type_sub provenance max(daily_search_count) max(max*) max(p90*) max(p50*) max(avg*)
+
+[Search Density]
+index=_audit action=search user=* user!=splunk-system-user search_id=* info=completed earliest=-7d@d latest=@d
+| eval sparseness=(event_count/scan_count)*100, density=case((sparseness<=100 AND sparseness>10),"Dense - 10%",(sparseness<=10 AND sparseness>1),"Sparse - 1%",(sparseness<=1),"Rare - .01%",1=1,"N/A - Leading Pipe Searches")
+| bin _time span=1d
+| stats count as daily_count by _time density
+| stats max(daily_count) p90(daily_count) p50(daily_count) avg(daily_count) by density
+| foreach *daily_count*
+    [ eval <<FIELD>> = ceil('<<FIELD>>') ]
+
+[Search Performance by Period]
+index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" search_id!="'searchparsetmp_*" search_id!="'remote_*" search_id=* total_run_time earliest=-7d@d latest=@d
+| eval host_sid = 'host'.":".'search_id'
+| eval search_type_org = search_type
+| eval
+    search_type = case(
+    match(search_id,"^\'\d{10}\.\d+"), "ad_hoc",
+    match(search_id,"^\'md\_"), "metadata",
+    match(search_id,"^\'prd\.ph\_"), "parallel_reduce",
+    match(search_id,"^\'rt\_\d{10}\.\d+"), "real_time",
+    match(search_id,"^\'scheduler\_\_?"), "scheduled",
+    match(search_id,"^\'subsearch\_"), "subsearch",
+    match(search_id,"^\'summarize\_"), "summary",
+    match(search_id,"^\'SummaryDirector\_"), "report_acceleration",
+    match(search_id,"^\'ta\_"), "type_ahead",
+    match(search_id,"^\'alertsmanager"), "type_ahead",
+    match(search_id,"^\'?\w+\_\_\w+\_\_"),"dashboard_panel",
+    1=1,provenance)
+| eval search_type_sub = case(match(search_type_org, "^(scheduled|datamodel_acceleration|report_acceleration)"), search_type_org, 1=1, search_type)
+| fillnull value="N/A" provenance
+| rex field=search_et "'?(?<start_time>[^']+)'?"
+| rex field=search_lt "'?(?<end_time>[^']+)'?"
+| eval range=if(start_time=="N/A","All Time", (end_time-start_time)/86400)
+| eval range_days=case(range=="All Time","ALL TIME", range<1,"0-1", range>=1 AND range<=7,"1-7", range>7 AND range<=14,"7-14", range>14 AND range<=21,"14-21", range>21 AND range<=31,"21-31", range>31 AND range<90,"31-90", range>90,"90+")
+| bin _time span=1d
+| stats dc(host_sid) AS daily_search_count max(total_run_time) p90(total_run_time) p50(total_run_time) avg(total_run_time) by _time app search_type search_type_sub provenance range_days info
+| stats max(*) by app search_type search_type_sub provenance range_days info
+| foreach *daily_search_count*
+    [ eval <<FIELD>> = round('<<FIELD>>',0) ]
+| fields app search_type search_type_sub provenance range_days info max(daily_search_count) max(max*) max(p90*) max(p50*) max(avg*)
+
+[Realtime Searches]
+| rest timeout=600 splunk_server=* /servicesNS/-/-/saved/searches search="disabled=0 dispatch.earliest_time=rt* OR dispatch.latest_time=rt*"
+| fields splunk_server eai:acl.app title dispatch.earliest_time dispatch.latest_time disabled
+| stats count as rt_search_count by splunk_server
+| search rt_search_count>0
+| rename splunk_server AS host
+
+[Long Running Searches]
+index=_audit action=search user=* user!=splunk-system-user search_id=* info=completed earliest=-7d@d latest=@d
+| eval search_name=if(savedsearch_name=="", search_id, savedsearch_name)
+| rex "\,\s+app\=\"(?<app_context>\S+)\""
+| fillnull value="N/A" app_context
+| eval range=if((search_lt=="N/A" OR search_et=="N/A"),"All Time or N/A",tostring((search_lt-search_et),"duration"))
+| rex "search='(?<search_text>[\S\s]+)('(, autojoin|\]\[n\/a\])|'\]$)"
+| eval search_text = if(isnull(search_text), search, search_text)
+| stats max(scan_count) AS scan_count max(event_count) AS event_count count AS search_runs max(total_run_time) AS run_time_sec  values(host) AS instance dc(host) AS dc_instance by app_context search_name search_text range user
+| search run_time_sec >= 300
+| table app_context search_name search_text range user instance dc_instance search_runs scan_count event_count run_time_sec
+| sort 0 - run_time_sec
+
+[User Authentications]
+| rest timeout=600 splunk_server=* /services/authentication/users
+| append
+    [ rest timeout=600 splunk_server=* /services/authentication/providers/services/active_authmodule
+    | rename active_authmodule AS type
+    | eval title=null(), roles=null()]
+| stats dc(title) AS total_users dc(roles) by type splunk_server
+| rename dc(*) AS dc_*, splunk_server AS host
+
+[Indexes]
+| eventcount summarize=false index=*
+
+[Apps]
+| rest timeout=600 splunk_server=* /services/apps/local
+| search disabled=0
+| table splunk_server label title version description details eai:acl.* show_in_nav visible
+
+[DMA Definitions]
+| rest timeout=600 splunk_server=* /services/admin/summarization by_tstats=t count=0
+| eval datamodel=replace('summary.id',"DM_".'eai:acl.app'."_","")
+| join type=left datamodel
+    [ rest timeout=600 splunk_server=* /services/data/models count=0
+    | fields title acceleration.cron_schedule acceleration.max_concurrent acceleration.max_time disabled
+    | rename acceleration.cron_schedule as cron_schedule acceleration.max_concurrent as accel_max_concurrent acceleration.max_time as accel_max_time
+    | rename title as datamodel ]
+| search disabled=0
+| fields datamodel eai:acl.app summary.is_inprogress summary.size summary.earliest_time summary.latest_time summary.complete summary.buckets_size summary.buckets summary.time_range summary.last_sid summary.access_count cron_schedule accel_max_concurrent accel_max_time disabled
+| rename summary.time_range AS retention, summary.earliest_time as earliest_event, summary.latest_time as latest_event
+| rename summary.* AS *, eai:acl.* AS *
+| sort datamodel
+| join type=left last_sid
+    [ rest timeout=600 splunk_server=* count=0 /services/search/jobs reportSearch=summarize*
+    | rename sid as last_sid
+    | fields last_sid, runDuration]
+| eval size(MB) = round(size / 1048576 ,2)
+| eval retention(days) = if(retention==0, "unlimited", retention / 86400)
+| eval complete(%) = round(complete * 100 , 2)
+| eval runDuration(s) = round(runDuration ,2)
+| sort 0 + datamodel
+| fields datamodel, app, cron_schedule, retention(days), earliest_event, latest_event, is_inprogress, complete(%), size(MB), runDuration(s), accel_max_concurrent, accel_max_time
+
+[ES Correlation Searches]
+| rest timeout=600 splunk_server=* count=0 /servicesNS/-/-/saved/searches search="\"action.correlationsearch.enabled\"=1 AND disabled=\"0\" is_scheduled=1"
+| rename eai:acl.* AS *
+| fields title app is_scheduled
+
+[ITSI Aggregation Policies] (This will fail when ITSI has not been installed)
+| rest timeout=600 splunk_server=* /servicesNS/nobody/SA-ITOA/event_management_interface/notable_event_aggregation_policy report_as=text
+| spath input=value
+| rename {}.disabled AS disabled {}.title AS title
+| fields disabled title
+| eval x=mvzip(title,disabled,"~")
+| mvexpand x
+| rex field=x "(?<title>[^\~]+)\~(?<disabled>\d+)"
+| fields disabled title
+
+[ITSI Correlation Searches] (This will fail when ITSI has not been installed)
+| rest timeout=600 splunk_server=* /services/event_management_interface/correlation_search report_as=text
+| rex mode=sed field=value "s/dispatch\./dispatch_/g"
+| spath input=value output=app path={}.eai:acl.app
+| spath input=value output=name path={}.name
+| spath input=value output=search path={}.search
+| spath input=value output=cron path={}.cron_schedule
+| spath input=value output=disabled path={}.disabled
+| spath input=value output=dispatch_et path={}.dispatch_earliest_time
+| spath input=value output=dispatch_lt path={}.dispatch_latest_time
+| spath input=value output=is_scheduled path={}.is_scheduled
+| spath input=value output=max_concurrent path={}.max_concurrent
+| fields splunk_server app name search cron disabled dispatch_et dispatch_lt is_scheduled max_concurrent
+| eval correlation_search = mvzip(mvzip(mvzip(mvzip(mvzip(mvzip(mvzip(mvzip(name, app, "@@"), search, "@@"), cron, "@@"), disabled, "@@"), dispatch_et, "@@"), dispatch_lt, "@@"), is_scheduled, "@@"), max_concurrent, "@@")
+| fields splunk_server correlation_search
+| mvexpand correlation_search
+| rex field=correlation_search "^(?<name>[\S\s]+?)@@(?<app>[\S\s]+?)@@(?<search>[\S\s]+?)@@(?<cron>[\S\s]+?)@@(?<disabled>[\S\s]+?)@@(?<dispatch_et>[\S\s]+?)@@(?<dispatch_lt>[\S\s]+?)@@(?<is_scheduled>[\S\s]+?)@@(?<max_concurrent>[\S\s]+?)"
+| fields splunk_server app name search cron dispatch_* is_scheduled max_concurrent disabled
