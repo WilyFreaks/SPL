@@ -70,6 +70,19 @@ index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" se
 | stats max(*) by search_type status
 | fields search_type status max(daily_count) max(total_run_time_max) max(total_run_time_p90) max(total_run_time_p50) max(total_run_time_avg)
 
+[Search Period]
+index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" search_id!="'searchparsetmp_*" search_id!="'remote_*" search_id=* (info=completed OR info=cancelled) NOT mcatalog earliest=-7d@d latest=@d
+| rex field=search_et "'?(?<start_time>[^']+)'?"
+| rex field=search_lt "'?(?<end_time>[^']+)'?"
+| eval range=if(start_time=="N/A","All Time", (end_time-start_time)/86400)
+| eval search_range_in_days=case(range=="All Time","ALL TIME", range<1,"0-1", range>=1 AND range<=7,"1-7", range>7 AND range<=14,"7-14", range>14 AND range<21,"14-21", range>=21 AND range<90,"21-90", range>90,"90+")
+| eval search_range_in_days=if(match(search, "^[\s\']*\|"), "ALL TIME W/LEADING PIPE", 'search_range_in_days')
+| bin _time span=1d
+| stats count as daily_count by _time search_range_in_days
+| stats max(daily_count) p90(daily_count) p50(daily_count) avg(daily_count) by search_range_in_days
+| foreach *daily_count*
+    [ eval <<FIELD>> = ceil('<<FIELD>>') ]
+
 [Concurrent Search Admission]
 | rest splunk_server=* /services/server/status/limits/search-concurrency 
 
