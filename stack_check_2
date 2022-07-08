@@ -114,6 +114,9 @@ index=_audit action=search user=* user!=splunk-system-user search_id=* info=comp
 [Indexes]
 | eventcount summarize=false index=*
 
+[Indexer Balance]
+| tstats count where index=* earliest=-7d@d latest=@d by _time span=1h splunk_server index
+
 [Apps]
 | rest timeout=600 splunk_server=* /services/apps/local
 | search disabled=0
