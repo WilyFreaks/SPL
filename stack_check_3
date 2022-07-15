@@ -1,9 +1,14 @@
 Stack Check Level 3. This is mainly for troubleshooting purposes.
 Run these searches under monitoring console app if it is connected to read your indexer data. If not, then run them from search heads.
-Replace sh* and idx* to match your actual Search Head and Indexer host name.
+Replace sh* and idx* to match your actual Search Head and Indexer host name and fwd* to match your actual Forwarders.
 
 [Forwarder Performance]
-index=_internal sourcetype=splunkd sourceHost=fwd
+index=_internal host=fwd* name=thruput average_kbps=* earliest=-1d@d latest=@d
+| bin _time span=1m
+| chart max(average_kbps) by _time ingest_pipe
+
+[Forwarder Load Balance]
+index=_internal sourcetype=splunkd sourceHost=fwd*
 | rename host as destHost
 | bin _time span=1h
 | stats count sum(kb) by _time destHost
