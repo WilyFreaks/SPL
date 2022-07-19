@@ -3,9 +3,10 @@ Run these searches under monitoring console app if it is connected to read your 
 Replace sh* and idx* to match your actual Search Head and Indexer host name and fwd* to match your actual Forwarders.
 
 [Forwarder Performance]
+index=_internal host=fwd* name=thruput average_kbps=* 
 | eval ingest_pipe = if(isnull(ingest_pipe), 0, ingest_pipe)
 | bin _time span=1h
-| stats max(average_kbps) sum(kb) sum(ev) by _time ingest_pipe
+| stats max(average_kbps) sum(kb) sum(ev) by _time host ingest_pipe
 
 [Forwarder Load Balance]
 index=_internal sourcetype=splunkd sourceHost=fwd*
