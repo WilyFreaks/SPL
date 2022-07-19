@@ -13,3 +13,13 @@ index=_internal sourcetype=splunkd sourceHost=fwd*
 | rename host as destHost
 | bin _time span=1h
 | stats count sum(kb) by _time destHost
+
+[Scheduled Search Search ID]
+index=_internal sourcetype=scheduler savedsearch_name=<Scheduled Search Name>
+| bin _time span=1d
+| stats count values(_time) as _time by sid
+
+[Search Process Status]
+index=_* data.search_props.sid="*<SID>" sourcetype IN (audittrail splunk_resource_usage splunkd_remote_searches splunkd) sourcetype=splunk_resource_usage
+| bin _time span=5m
+| stats count max(data.normalized_pct_cpu) max(data.pct_memory) max(data.mem_used) max(data.read_mb) values(data.status) by _time host data.pid
