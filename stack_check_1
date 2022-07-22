@@ -101,9 +101,9 @@ index=_introspection data.search_props.sid::* component=PerProcess sourcetype=sp
 [Short Search Concurrency]
 index=_internal sourcetype=splunkd source=*metrics.log group=search_concurrency "system total" earliest=-7d@d latest=@d
 | bin _time span=1d
-| stats max(active_hist_searches) p90(active_hist_searches) p50(active_hist_searches) avg(active_hist_searches) by _time host
+| stats max(active_hist_searches) p90(active_hist_searches) p50(active_hist_searches) avg(active_hist_searches) max(active_realtime_searches) p90(active_realtime_searches) p50(active_realtime_searches) avg(active_realtime_searches) by _time host
 | stats max(*) as * by host
-| foreach *active_hist_searches*
+| foreach *active_*_searches*
     [ eval <<FIELD>> = round('<<FIELD>>', 1) ]
 
 [Scheduled Searches by Status per Day]
