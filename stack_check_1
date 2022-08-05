@@ -51,6 +51,10 @@ index=_internal host=idx* source=*metrics.log sourcetype=splunkd group=queue (na
 | stats perc90(fill_perc) count(eval(blocked="true")) as blocked_count by _time host ingest_pipe name
 | rename name AS queue
 
+[Indexing Lag Time]
+| tstats max(_indextime) max(_time) by index
+| eval indexing_lag_time = 'max(_indextime)' - 'max(_time)'
+
 [Searches per Day]
 index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" search_id!="'searchparsetmp_*" search_id!="'remote_*" search_id=* total_run_time earliest=-7d@d latest=@d
 | eval host_sid = 'host'.":".'search_id'
