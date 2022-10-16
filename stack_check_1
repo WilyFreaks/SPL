@@ -125,7 +125,7 @@ index=_internal host=sh* (status="completed" OR status="success" OR status="skip
 | eval execution_latency = round(execution_latency,0)
 | sort 0 - skipped_exec
 
-[Shceduled Search Detail]
+[Scheduled Search Detail]
 index=_internal host=sh* source=*scheduler.log sourcetype=scheduler SavedSplunker status!=delegated_* earliest=-7d@d latest=@d 
 | sort 0 app savedsearch_name _time
 | streamstats window=1 current=f reset_on_change=t last(scheduled_time) as prev_scheduled_time by app savedsearch_name
