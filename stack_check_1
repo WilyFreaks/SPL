@@ -52,7 +52,7 @@ index=_internal host=idx* source=*metrics.log sourcetype=splunkd group=queue (na
 | rename name AS queue
 
 [Indexing Lag Time]
-| tstats max(_indextime) max(_time) by index
+| tstats max(_indextime) max(_time) where index=* by index
 | eval indexing_lag_time = 'max(_indextime)' - 'max(_time)'
 
 [Searches per Day]
