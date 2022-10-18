@@ -23,3 +23,13 @@ index=_internal sourcetype=scheduler savedsearch_name=<Scheduled Search Name>
 index=_* data.search_props.sid="*<SID>" sourcetype IN (audittrail splunk_resource_usage splunkd_remote_searches splunkd) sourcetype=splunk_resource_usage
 | bin _time span=5m
 | stats count max(data.normalized_pct_cpu) max(data.pct_memory) max(data.mem_used) max(data.read_mb) values(data.status) by _time host data.pid
+
+[Cluster Hot Bucket Replication Lag]
+index=_internal sourcetype=splunkd source=/opt/splunk/var/log/splunk/metrics.log* component=Metrics (TERM(group=clusterout_connections) TERM(isHotSlice=true)) OR (TERM(group=per_Index_thruput))
+| bin _time span=10s
+| rex field=name "^(?<dest_peer>[^:]+):(?<dest_port>[^:]+):(?<bucket>[^:]+)"
+| rex field=bucket "^(?<repl_index>[^~]+)"
+| eval repl_tcp_KBps = if(group="clusterout_connections", tcp_KBps, null()), repl_tcp_avg_thruput = if(group="clusterout_connections", tcp_avg_thruput, null()), repl_kb = if(group="clusterout_connections", kb, null())
+| eval index = if(group="clusterout_connections", repl_index, series)
+| stats avg(repl_tcp_KBps) as repl_tcp_KBps avg(repl_tcp_avg_thruput) as repl_tcp_avg_thruput sum(repl_kb) as repl_kb avg(kbps) as ingestion_kbps sum(kb) as ingestion_kb by _time host index
+| eval repl_lag = round((ingestion_kb - repl_kb) / repl_tcp_avg_thruput)
