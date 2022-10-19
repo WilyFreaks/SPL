@@ -45,3 +45,7 @@ index=_internal sourcetype=splunkd source=/opt/splunk/var/log/splunk/metrics.log
 | fields - eai:*
 | untable title property value
 
+[Limits.conf]
+| rest /services/configs/conf-limits server=local
+| fields - eai:*
+| untable title property value
