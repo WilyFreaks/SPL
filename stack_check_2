@@ -84,7 +84,9 @@ index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" se
 
 [Realtime Searches]
 | rest timeout=600 splunk_server=* /servicesNS/-/-/saved/searches search="disabled=0 dispatch.earliest_time=rt* OR dispatch.latest_time=rt*"
-| fields splunk_server eai:acl.app title dispatch.earliest_time dispatch.latest_time disabled
+| rename eai:acl.app as APP
+| fields - eai:* display.* id
+| untable title property value
 
 [Long Running Searches]
 index=_audit action=search user=* user!=splunk-system-user search_id=* info=completed earliest=-7d@d latest=@d
