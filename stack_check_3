@@ -35,7 +35,7 @@ index=_internal sourcetype=splunkd source=/opt/splunk/var/log/splunk/metrics.log
 | eval repl_lag = round((ingestion_kb - repl_kb) / repl_tcp_avg_thruput)
 
 [Cluster Hot Bucket Status]
-| dbinspect index=_audit splunk_server=* state=hot earliest=-24h@h latest=@h
+| dbinspect index=* splunk_server=* state=hot earliest=-24h@h latest=@h
 | fields bucketId path id state splunk_server modTime
 | rex field=path ".*\/db\/(?<bucketName>.*)"
 | sort 0 bucketId
