@@ -52,8 +52,10 @@ index=_internal host=idx* source=*metrics.log sourcetype=splunkd group=queue (na
 | rename name AS queue
 
 [Indexing Lag Time]
-| tstats max(_indextime) max(_time) where index=* by index
+| tstats max(_indextime) max(_time) where index=* by index _time span=5m
 | eval indexing_lag_time = 'max(_indextime)' - 'max(_time)'
+| bin _time span=1h
+| stats max(indexing_lag_time) by index _time
 
 [Searches per Day]
 index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" search_id!="'searchparsetmp_*" search_id!="'remote_*" search_id=* total_run_time earliest=-7d@d latest=@d
