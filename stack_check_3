@@ -49,3 +49,6 @@ index=_internal sourcetype=splunkd source=/opt/splunk/var/log/splunk/metrics.log
 | rest /services/configs/conf-limits server=local
 | fields - eai:*
 | untable title property value
+
+[KV Store Status]
+| rest splunk_server=* /services/kvstore/status
