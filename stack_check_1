@@ -51,6 +51,11 @@ index=_internal host=idx* source=*metrics.log sourcetype=splunkd group=queue (na
 | stats perc90(fill_perc) count(eval(blocked="true")) as blocked_count by _time host ingest_pipe name
 | rename name AS queue
 
+[Ingestion Lag Time]
+index=_internal host=idx* source=*metrics.log* group=per_index_thruput
+| bin _time span=1h
+| stats min(avg_age) max(avg_age) avg(avg_age) p90(avg_age) by _time series
+
 [Indexing Lag Time]
 | tstats max(_indextime) max(_time) where index=* by index _time span=5m
 | eval indexing_lag_time = 'max(_indextime)' - 'max(_time)'
