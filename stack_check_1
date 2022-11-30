@@ -41,7 +41,7 @@ index=_internal host=idx* source="*metrics.log" sourcetype=splunkd group=per_Ind
 | stats sum(mb) as MBh by _time host ingest_pipe
 
 [Index Queue Fill Ratio]
-index=_internal host=idx* source=*metrics.log sourcetype=splunkd group=queue (name=tcpin_queue OR name=splunktcpin OR name=parsingqueue OR name=aggqueue OR name=typingqueue OR name=indexqueue) OR blocked=true earliest=-7d@d latest=@d 
+index=_internal host=idx* source=*metrics.log sourcetype=splunkd group=queue (name=tcpin_queue OR name=udpin_queue OR name=splunktcpin OR name=HttpInputQ OR name=parsingqueue OR name=aggqueue OR name=typingqueue OR name=indexqueue) OR blocked=true earliest=-7d@d latest=@d 
 | eval ingest_pipe = if(isnotnull(ingest_pipe), ingest_pipe, "0")
 | search ingest_pipe=*
 | eval max=if(isnotnull(max_size_kb),max_size_kb,max_size)
