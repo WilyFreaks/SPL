@@ -54,3 +54,31 @@ index=_internal sourcetype=splunkd source=/opt/splunk/var/log/splunk/metrics.log
 
 [KV Store Status]
 | rest splunk_server=* /services/kvstore/status
+
+[Search Resource Usage on SH]
+(index=_introspection sourcetype=splunk_resource_usage component=perprocess host=sh* data.search_props.sid=*) 
+| eval pct_cpu = 'data.normalized_pct_cpu', mem_used = 'data.mem_used' 
+| rename data.search_props.* as * 
+| stats count max(pct_cpu) max(mem_used) earliest(_time) latest(_time) by app user sid 
+| join sid 
+    [ search index=_audit host=sh* sourcetype=audittrail action=search info=granted OR info=completed OR info=canceled OR info=failed 
+    | rex "search='(?<search_text>[\S\s]+)('(, autojoin|\]\[n\/a\])|'\]$)" 
+    | eval search_text = if(isnull(search_text), search, search_text) 
+    | stats values(search) as search_text latest(info) as latest_status latest(total_run_time) as total_run_time by search_id 
+    | rex field=search_id mode=sed "s/(^'|'$)//g" 
+    | rex field=search_text mode=sed "s/(^'|'$)//g" 
+    | rename search_id as sid ]
+    
+ [DMA Done Buckets]
+ | rest splunk_server=local /services/cluster/manager/buckets summaries=true
+| search index=main
+| fields bucket_size frozen id index *.status *_DM_*.state
+| foreach *_DM_search_*.state 
+    [ eval <<MATCHSEG2>>_done = if ('<<FIELD>>' == "done", if(isnull('<<MATCHSEG2>>_done'), 1, '<<MATCHSEG2>>_done' + 1), '<<MATCHSEG2>>_done')
+    | eval <<MATCHSEG2>>_hot_done = if ('<<FIELD>>' == "hot_done", if(isnull('<<MATCHSEG2>>_hot_done'), 1, '<<MATCHSEG2>>_hot_done' + 1), '<<MATCHSEG2>>_hot_done') ]
+| foreach *.status
+    [ eval status = if('<<FIELD>>' == "Complete", "warm", status) ]
+| search status=warm
+| fields index id status *_done
+| fields - *_hot_done
+| rex field=id "buckets\/(?<id>.*)"
