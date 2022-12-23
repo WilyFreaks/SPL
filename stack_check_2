@@ -82,7 +82,14 @@ index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" se
     [ eval <<FIELD>> = round('<<FIELD>>',0) ]
 | fields app search_type search_type_sub provenance range_days info max(daily_search_count) max(max*) max(p90*) max(p50*) max(avg*)
 
-[Realtime Searches]
+[Realtime Search Executions]
+index=_audit action=search mode=RT host=sh*
+| rex "search='(?<search_text>[\S\s]+)('(, autojoin|\]\[n\/a\])|'\]$)"
+| eval search_text = if(isnull(search_text), search, search_text)
+| search search_id='rt_* OR search_id=rt_*
+| table _time host app user search_id search_text mode
+
+[Realtime Saved Searches]
 | rest timeout=600 splunk_server=* /servicesNS/-/-/saved/searches search="disabled=0 dispatch.earliest_time=rt* OR dispatch.latest_time=rt*"
 | rename eai:acl.app as APP
 | fields - eai:* display.* id
