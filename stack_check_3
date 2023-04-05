@@ -14,6 +14,16 @@ index=_internal sourcetype=splunkd sourceHost=fwd*
 | bin _time span=1h
 | stats count sum(kb) by _time destHost
 
+[Forwarder File Process Performance]
+index=_internal host=fwd* sourcetype=splunkd "Finished processing file"
+| rex "(?<process>(Finished processing file|Handling file))"
+| rex "Finished processing file '(?<file>\S+)'"
+| eval startTime = if(process="Handling file", _time, null)
+| eval endTime = if(process="Finished processing file", _time, null)
+| stats min(startTime) as startTime, max(endTime) as endTime by file
+| search startTime=* endTime=*
+| eval duration = endTime - startTime
+
 [Scheduled Search Search ID]
 index=_internal sourcetype=scheduler savedsearch_name=<Scheduled Search Name>
 | bin _time span=1d
