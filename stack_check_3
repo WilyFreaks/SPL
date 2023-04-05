@@ -36,6 +36,9 @@ index=_internal sourcetype=splunkd sourceHost=fwd*
 | bin _time span=1h
 | stats count sum(kb) by _time destHost
 
+[Forwarder File Descriptor]
+index-_internal host=fwd* "File descriptor cache is full"
+
 [Scheduled Search Search ID]
 index=_internal sourcetype=scheduler savedsearch_name=<Scheduled Search Name>
 | bin _time span=1d
