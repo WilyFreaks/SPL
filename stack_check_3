@@ -1,6 +1,7 @@
 Stack Check Level 3. This is mainly for troubleshooting purposes.
 Run these searches under monitoring console app if it is connected to read your indexer data. If not, then run them from search heads.
 Replace sh* and idx* to match your actual Search Head and Indexer host name and fwd* to match your actual Forwarders.
+Time perios is also neec to be adjusted for your troubleshooting purpose.
 
 [Forwarder Performance]
 index=_internal host=fwd* name=thruput average_kbps=* 
@@ -20,21 +21,25 @@ index=_internal host=idx* source=*metrics.log group=tcpin_connections
 | bin _time span=1h
 | stats avg(tcp_KBps) sum(tcp_eps) sum(tcp_Kprocessed) sum(kb) by _time connectType sourceIp sourceHost destPort Indexer Ver
 
-[Forwarder File Process Performance]
-index=_internal host=fwd* sourcetype=splunkd "Finished processing file"
-| rex "(?<process>(Finished processing file|Handling file))"
-| rex "Finished processing file '(?<file>\S+)'"
-| eval startTime = if(process="Handling file", _time, null)
-| eval endTime = if(process="Finished processing file", _time, null)
-| stats min(startTime) as startTime, max(endTime) as endTime by file
-| search startTime=* endTime=*
-| eval duration = endTime - startTime
+[Forwarder File Reading Interval]
+index=_internal sourcetype=splunkd host=fwd* (WatchedFile "will begin reading") file='FILE_TO_MONITOR'
+| sort host thread_id file _time
+| eval date = strftime(_time, "%Y/%m/%d")
+| eval tail_thread_id = if(component="WatchedFile", thread_id, null())
+| filldown tail_thread_id
+| streamstats current=f last(_time) as prev_time by host file tail_thread_id reset_on_change=t
+| search prev_time=*
+| eval reading_interval = _time - prev_time
+| table _time host file reading_interval
 
 [Forwarder Load Balance]
 index=_internal sourcetype=splunkd sourceHost=fwd*
 | rename host as destHost
 | bin _time span=1h
 | stats count sum(kb) by _time destHost
+
+[Forwarder Enqueuing Large File]
+index-_internal host=fwd* Enqueuing a very large file
 
 [Forwarder File Descriptor]
 index-_internal host=fwd* "File descriptor cache is full"
