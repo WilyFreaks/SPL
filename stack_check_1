@@ -62,6 +62,10 @@ index=_internal host=idx* source=*metrics.log* group=per_index_thruput
 | bin _time span=1h
 | stats max(indexing_lag_time) by index _time
 
+[Active Users]
+index=_audit host=sh* sourcetype=audittrail action=search earliest=-7d@d latest=@d user=* user!=splunk-system-user
+| stats dc(user)
+
 [Searches per Day]
 index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" search_id!="'searchparsetmp_*" search_id!="'remote_*" search_id=* total_run_time earliest=-7d@d latest=@d
 | eval host_sid = 'host'.":".'search_id'
