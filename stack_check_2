@@ -3,7 +3,7 @@ Run these searches under monitoring console app if it is connected to read your 
 Replace sh* and idx* to match your actual Search Head and Indexer host name.
 
 [Resource Consumer]
-index=_introspection host IN (sh* idx*) sourcetype="splunk_resource_usage" component=PerProcess data.normalized_pct_cpu=*
+index=_introspection host IN (sh* idx*) sourcetype="splunk_resource_usage" component=PerProcess data.normalized_pct_cpu=* earliest=-7d@d latest=@d
 | eval search_label=case(isnull(search_label) AND search_type=="ad-hoc","no label: ad-hoc", match(sid,"IndexesPrefix"),"no label: IndexesPrefix", isnull(search_label) AND match(sid,"subsearch"),"no label: subsearch", isnull(search_label) AND match(sid,"SummaryDirector"),"no label: SummaryDirector", isnull(search_label) AND process_type=="search", "no label: missing context", 1==1, search_label)
 | rename data.search_props.* AS search_*, data.process_type AS process_type
 | fillnull value="" search_app, search_mode, search_type, search_role, search_user, search_provenance, search_label
