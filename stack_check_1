@@ -13,24 +13,24 @@ Replace sh* and idx* to match your actual Search Head and Indexer host name.
 index=_introspection host IN (sh*, idx*) component=Hostwide  earliest=-7d@d latest=@d
 | eval cpu_usage = 'data.cpu_system_pct' + 'data.cpu_user_pct'
 | bin _time span=1h
-| stats max(cpu_usage) p90(cpu_usage) p50(cpu_usage) avg(cpu_usage) by _time host
+| stats max(cpu_usage) p99(cpu_usage) p90(cpu_usage) p50(cpu_usage) avg(cpu_usage) by _time host
 
 [Load Average]
 index=_introspection host IN (sh*, idx*) component=Hostwide earliest=-7d@d latest=@d
 | bin _time span=1h
-| stats max(data.normalized_load_avg_1min) p90(data.normalized_load_avg_1min) p50(data.normalized_load_avg_1min) avg(data.normalized_load_avg_1min) by _time host
+| stats max(data.normalized_load_avg_1min) p99(data.normalized_load_avg_1min) p90(data.normalized_load_avg_1min) p50(data.normalized_load_avg_1min) avg(data.normalized_load_avg_1min) by _time host
 
 [Memory Utilization]
 index=_introspection host IN (*sh*, *idx*) sourcetype=splunk_resource_usage component=Hostwide earliest=-7d@d latest=@d
 | eval mem_used_rate = round(('data.mem_used' / 'data.mem') * 100, 2)
 | bin _time span=1h
-| stats max(mem_used_rate) p90(mem_used_rate) p50(mem_used_rate) avg(mem_used_rate) by _time host
+| stats max(mem_used_rate) p99(mem_used_rate) p90(mem_used_rate) p50(mem_used_rate) avg(mem_used_rate) by _time host
 
 [Disk I/O]
 component=IOStats host IN (sh*, idx*) index=_introspection sourcetype=splunk_resource_usage earliest=-7d@d latest=@d
 | eval mount_point='data.mount_point', reads_ps='data.reads_ps', writes_ps='data.writes_ps', interval='data.interval', op_count=((reads_ps + writes_ps) * interval), iops=(reads_ps + writes_ps), avg_service_ms='data.avg_service_ms', avg_wait_ms='data.avg_total_ms', cpu_pct='data.cpu_pct', network_pct='data.network_pct' 
 | bin _time span=1h
-| stats max(avg_wait_ms) min(avg_wait_ms) p90(avg_wait_ms) p75(avg_wait_ms) p50(avg_wait_ms) p25(avg_wait_ms) max(iops) min(iops) p90(iops) p75(iops) p50(iops) p25(iops) by _time host mount_point
+| stats max(avg_wait_ms) min(avg_wait_ms) p99(avg_wait_ms) p90(avg_wait_ms) p75(avg_wait_ms) p50(avg_wait_ms) p25(avg_wait_ms) max(iops) min(iops) p99(iops) p90(iops) p75(iops) p50(iops) p25(iops) by _time host mount_point
 
 [Ingestion]
 index=_internal host=idx* source="*metrics.log" sourcetype=splunkd group=per_Index_thruput earliest=-7d@d latest=@d
@@ -54,7 +54,7 @@ index=_internal host=idx* source=*metrics.log sourcetype=splunkd group=queue (na
 [Ingestion Lag Time]
 index=_internal host=idx* source=*metrics.log* group=per_index_thruput
 | bin _time span=1h
-| stats min(avg_age) max(avg_age) avg(avg_age) p90(avg_age) by _time series
+| stats min(avg_age) max(avg_age) avg(avg_age) p99(avg_age) p90(avg_age) by _time series
 
 [Indexing Lag Time]
 | tstats max(_indextime) max(_time) where index=* by index _time span=5m
@@ -82,9 +82,9 @@ index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" se
 | eval search_type=case(match(search_id,"^SummaryDirector_"),"summarization",match(savedsearch_name,"^_ACCELERATE_"),"acceleration",match(search_id,"^((rt_)?scheduler_|alertsmanager_)"),"scheduled",match(search_id,"\\d{10}\\.\\d+(_[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})?$"),"ad hoc",true(),"other") 
 | bin _time span=1d
 | stats values(user) as user, latest(info) as status, max(total_run_time) as total_run_time, values(Index) as Index , first(search) as search, first(search_type) as search_type, values(app) as app, first(apiStartTime) as apiStartTime, first(apiEndTime) as apiEndTime , first(search_et) as search_et, first(search_lt) as search_lt, max(searched_buckets) as searched_buckets, max(scan_count) as scan_count, max(considered_events) as considered_events, max(event_count) as event_count, max(result_count) as result_count, first(exec_time) as exec_time by _time host search_id
-| stats count as daily_count max(total_run_time) as total_run_time_max p90(total_run_time) as total_run_time_p90 p50(total_run_time) as total_run_time_p50 avg(total_run_time) as total_run_time_avg by _time host search_type status
+| stats count as daily_count max(total_run_time) as total_run_time_max p99(total_run_time) as total_run_time_p99 p90(total_run_time) as total_run_time_p90 p50(total_run_time) as total_run_time_p50 avg(total_run_time) as total_run_time_avg by _time host search_type status
 | stats max(*) by host search_type status
-| fields host search_type status max(daily_count) max(total_run_time_max) max(total_run_time_p90) max(total_run_time_p50) max(total_run_time_avg)
+| fields host search_type status max(daily_count) max(total_run_time_max) max(total_run_time_p99) max(total_run_time_p90) max(total_run_time_p50) max(total_run_time_avg)
 
 [Search Period]
 index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" search_id!="'searchparsetmp_*" search_id!="'remote_*" search_id=* (info=completed OR info=cancelled) NOT mcatalog earliest=-7d@d latest=@d
@@ -95,7 +95,7 @@ index=_audit search_id!="'rsa_*" search_id!="'RemoteStorageRetrieveBuckets_*" se
 | eval search_range_in_days=if(match(search, "^[\s\']*\|"), "ALL TIME W/LEADING PIPE", 'search_range_in_days')
 | bin _time span=1d
 | stats count as daily_count by _time search_range_in_days
-| stats max(daily_count) p90(daily_count) p50(daily_count) avg(daily_count) by search_range_in_days
+| stats max(daily_count) p99(daily_count) p90(daily_count) p50(daily_count) avg(daily_count) by search_range_in_days
 | foreach *daily_count*
     [ eval <<FIELD>> = ceil('<<FIELD>>') ]
 
@@ -108,7 +108,7 @@ index=_introspection data.search_props.sid::* component=PerProcess sourcetype=sp
 | bin span=10s _time 
 | stats dc(sid) AS concurrency by _time search_head type
 | bin span=1d _time
-| stats max(concurrency) p90(concurrency) p50(concurrency) avg(concurrency) by _time search_head type
+| stats max(concurrency) p99(concurrency) p90(concurrency) p50(concurrency) avg(concurrency) by _time search_head type
 | stats max(*) as * by search_head type
 | foreach *concurrency*
     [ eval <<FIELD>> = round('<<FIELD>>', 1) ]
@@ -116,7 +116,7 @@ index=_introspection data.search_props.sid::* component=PerProcess sourcetype=sp
 [Short Search Concurrency]
 index=_internal sourcetype=splunkd source=*metrics.log group=search_concurrency "system total" earliest=-7d@d latest=@d
 | bin _time span=1d
-| stats max(active_hist_searches) p90(active_hist_searches) p50(active_hist_searches) avg(active_hist_searches) max(active_realtime_searches) p90(active_realtime_searches) p50(active_realtime_searches) avg(active_realtime_searches) by _time host
+| stats max(active_hist_searches) p99(active_hist_searches) p90(active_hist_searches) p50(active_hist_searches) avg(active_hist_searches) max(active_realtime_searches) p99(active_realtime_searches) p90(active_realtime_searches) p50(active_realtime_searches) avg(active_realtime_searches) by _time host
 | stats max(*) as * by host
 | foreach *active_*_searches*
     [ eval <<FIELD>> = round('<<FIELD>>', 1) ]
