@@ -62,6 +62,15 @@ index=_internal host=idx* source=*metrics.log* group=per_index_thruput
 | bin _time span=1h
 | stats max(indexing_lag_time) by index _time
 
+[Index Bucket Status] Run this search for last 24 hours minimum.
+| dbinspect index=* 
+| search eventCount!=0 
+| fields index rawSize sizeOnDiskMB state bucketId id path startEpoch endEpoch modTime tsidxState splunk_server 
+| eval fullpath=splunk_server+"/"+path 
+| eval rawSize = round(rawSize / 1024 / 1024, 5 ) 
+| eval compRatio = round((sizeOnDiskMB / rawSize),4) 
+| stats dc(bucketId) dc(id) dc(path) dc(fullpath) avg(rawSize) p50(rawSize) p90(rawSize) max(rawSize) avg(sizeOnDiskMB) p50(sizeOnDiskMB) p90(sizeOnDiskMB) max(sizeOnDiskMB) avg(compRatio) p50(compRatio) p90(compRatio) max(compRatio) by index state tsidxState
+
 [Active Users]
 index=_audit host=sh* sourcetype=audittrail action=search earliest=-7d@d latest=@d user=* user!=splunk-system-user
 | stats dc(user)
