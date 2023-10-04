@@ -19,7 +19,7 @@ index=_internal host=idx* source=*metrics.log group=tcpin_connections
 | fields connectType sourceIp sourceHost destPort kb tcp_eps tcp_Kprocessed tcp_KBps splunk_server Ver 
 | eval Indexer= splunk_server 
 | bin _time span=1h
-| stats avg(tcp_KBps) sum(tcp_eps) sum(tcp_Kprocessed) sum(kb) by _time connectType sourceIp sourceHost destPort Indexer Ver
+| stats avg(tcp_KBps) avg(tcp_eps) sum(tcp_Kprocessed) sum(kb) by _time connectType sourceIp sourceHost destPort Indexer Ver
 
 [Forwarder File Reading Interval]
 index=_internal sourcetype=splunkd host=fwd* (WatchedFile "will begin reading") file='FILE_TO_MONITOR'
